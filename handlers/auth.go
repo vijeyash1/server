@@ -1,17 +1,98 @@
 package handlers
 
 import (
-	"crypto/sha256"
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
 	"net/http"
+	"net/url"
+	"os"
 	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
-	"github.com/rs/xid"
-	"github.com/vijeyash1/server/models"
-	"go.mongodb.org/mongo-driver/bson"
+	"golang.org/x/oauth2"
 )
+
+// Authenticator is used to authenticate our users.
+type Authenticator struct {
+	*oidc.Provider
+	oauth2.Config
+}
+
+// New instantiates the *Authenticator.
+func New() (*Authenticator, error) {
+	provider, err := oidc.NewProvider(
+		context.Background(),
+		"https://"+os.Getenv("AUTH0_DOMAIN")+"/",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	conf := oauth2.Config{
+		ClientID:     os.Getenv("AUTH0_CLIENT_ID"),
+		ClientSecret: os.Getenv("AUTH0_CLIENT_SECRET"),
+		RedirectURL:  os.Getenv("AUTH0_CALLBACK_URL"),
+		Endpoint:     provider.Endpoint(),
+		Scopes:       []string{oidc.ScopeOpenID, "profile"},
+	}
+
+	return &Authenticator{
+		Provider: provider,
+		Config:   conf,
+	}, nil
+}
+
+// VerifyIDToken verifies that an *oauth2.Token is a valid *oidc.IDToken.
+func (a *Authenticator) VerifyIDToken(ctx context.Context, token *oauth2.Token) (*oidc.IDToken, error) {
+	rawIDToken, ok := token.Extra("id_token").(string)
+	if !ok {
+		return nil, errors.New("no id_token field in oauth2 token")
+	}
+
+	oidcConfig := &oidc.Config{
+		ClientID: a.ClientID,
+	}
+
+	return a.Verifier(oidcConfig).Verify(ctx, rawIDToken)
+}
+
+// Handler for our login.
+func LoginHandler(auth *Authenticator) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		state, err := generateRandomState()
+		if err != nil {
+			ctx.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		// Save the state inside the session.
+		session := sessions.Default(ctx)
+		session.Set("state", state)
+		if err := session.Save(); err != nil {
+			ctx.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		ctx.Redirect(http.StatusTemporaryRedirect, auth.AuthCodeURL(state))
+	}
+}
+
+func generateRandomState() (string, error) {
+	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", err
+	}
+
+	state := base64.StdEncoding.EncodeToString(b)
+
+	return state, nil
+}
 
 type Claims struct {
 	Username string `json:"username"`
@@ -22,6 +103,7 @@ type JWTOutput struct {
 	Token   string    `json:"token"`
 	Expires time.Time `json:"expires"`
 }
+
 func (handler *RecipesHandler) LogoutHandler(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()
@@ -29,72 +111,78 @@ func (handler *RecipesHandler) LogoutHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "Logged out successfully"})
 }
 
-func (handler *RecipesHandler) SignupHandler(c *gin.Context) {
-	var user models.User
-	err := c.BindJSON(&user)
+// Handler for our logout.
+func LogoutHandler(ctx *gin.Context) {
+	logoutUrl, err := url.Parse("https://" + os.Getenv("AUTH0_DOMAIN") + "/v2/logout")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	h := sha256.New()
+	scheme := "http"
+	if ctx.Request.TLS != nil {
+		scheme = "https"
+	}
 
-	user.Password = string(h.Sum([]byte(user.Password)))
-
-	_, err = handler.usercollection.InsertOne(handler.ctx, user)
+	returnTo, err := url.Parse(scheme + "://" + ctx.Request.Host)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error inserting the value", "message": err.Error()})
+		ctx.String(http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"status": "success"})
+
+	parameters := url.Values{}
+	parameters.Add("returnTo", returnTo.String())
+	parameters.Add("client_id", os.Getenv("AUTH0_CLIENT_ID"))
+	logoutUrl.RawQuery = parameters.Encode()
+
+	ctx.Redirect(http.StatusTemporaryRedirect, logoutUrl.String())
 }
 
-func (handler *RecipesHandler) RefreshTokenHandler(c *gin.Context) {
-	tokenString := c.Request.Header.Get("Authorization")
-	claims := &Claims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte("secret"), nil
-	})
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
-		return
-	}
-	if time.Unix(claims.ExpiresAt, 0).Sub(time.Now()) > 30*time.Second {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Token is not expired yet"})
-		return
-	}
-	expirationTime := time.Now().Add(time.Minute * 5)
-	claims.ExpiresAt = expirationTime.Unix()
-	token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err = token.SignedString([]byte("secret"))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "data": JWTOutput{Token: tokenString, Expires: expirationTime}})
+func (handler *RecipesHandler) Home(c *gin.Context) {
+	c.String(http.StatusOK, "Thank you for visiting us")
 }
 
-func (handler *RecipesHandler) LoginHandler(c *gin.Context) {
-	user := models.User{}
-	err := c.BindJSON(&user)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
-		return
-	}
-	h := sha256.New()
-	curr := handler.usercollection.FindOne(handler.ctx, bson.M{
-		"username": user.Username,
-		"password": string(h.Sum([]byte(user.Password))),
-	})
-	if curr.Err() != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Invalid username or password"})
-		return
-	}
+func CallbackHandler(auth *Authenticator) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		session := sessions.Default(ctx)
+		if ctx.Query("state") != session.Get("state") {
+			ctx.String(http.StatusBadRequest, "Invalid state parameter.")
+			return
+		}
 
-	sessionToken := xid.New().String()
+		// Exchange an authorization code for a token.
+		token, err := auth.Exchange(ctx.Request.Context(), ctx.Query("code"))
+		if err != nil {
+			ctx.String(http.StatusUnauthorized, "Failed to convert an authorization code into a token.")
+			return
+		}
+
+		idToken, err := auth.VerifyIDToken(ctx.Request.Context(), token)
+		if err != nil {
+			ctx.String(http.StatusInternalServerError, "Failed to verify ID Token.")
+			return
+		}
+
+		var profile map[string]interface{}
+		if err := idToken.Claims(&profile); err != nil {
+			ctx.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		session.Set("access_token", token.AccessToken)
+		session.Set("profile", profile)
+		if err := session.Save(); err != nil {
+			ctx.String(http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		// Redirect to logged in page.
+		ctx.Redirect(http.StatusTemporaryRedirect, "/user")
+	}
+}
+func (handler *RecipesHandler) User(c *gin.Context) {
 	session := sessions.Default(c)
-	session.Set("sessionToken", sessionToken)	
-	session.Set("username", user.Username)
-	session.Save()
-	c.String(http.StatusOK, "Logged in successfully")
+	accessToken := session.Get("access_token")
+	profile := session.Get("profile")
+	c.JSON(http.StatusOK, gin.H{"access_token": accessToken, "profile": profile})
 }

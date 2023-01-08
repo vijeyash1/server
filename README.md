@@ -17,3 +17,7 @@ sample recipes post:
 "Step 3."
 ]
 }
+
+
+callback := https://api.recipes.io/callback
+login := https://api.recipes.io/login
