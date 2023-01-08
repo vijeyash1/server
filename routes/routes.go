@@ -58,6 +58,7 @@ func InitRoutes() {
 	router.GET("/recipes", handler.ListRecipesHandler)
 	authHandler := &handlers.AuthHandler{}
 	router.POST("/signin", authHandler.LoginHandler)
+	router.POST("/refresh", authHandler.RefreshTokenHandler)
 	Authorized := router.Group("/")
 	Authorized.Use(AuthMiddleware())
 	{
