@@ -19,7 +19,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		session := sessions.Default(c)
 		token := session.Get("sessionToken")
 		if token == nil {
-			c.JSON(401, gin.H{"status": "error", "message": "Unauthorized"})
+			c.JSON(401, gin.H{"status": "error", "message": "Please Signup if you are a new user and Login if you are an existing user"})
 			c.Abort()
 			return
 		}
