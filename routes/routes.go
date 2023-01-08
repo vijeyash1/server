@@ -12,8 +12,16 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
-
-
+func AuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := c.GetHeader("Authorization-Token")
+		if token != "12345" {
+			c.AbortWithStatusJSON(401, gin.H{"error": "Unauthorized"})
+			return
+		}
+		c.Next()
+	}
+}
 
 func InitRoutes() {
 	ctx := context.Background()
@@ -37,12 +45,18 @@ func InitRoutes() {
 	log.Println("Connected to MongoDB")
 
 	handler := handlers.NewRecipesHandler(client.Database("recipes").Collection("recipes"), ctx, redisClient)
+
 	router := gin.Default()
-	router.POST("/recipes", handler.NewRecipeHandler)
 	router.GET("/recipes", handler.ListRecipesHandler)
-	router.PUT("/recipes/:id", handler.UpdateRecipeHAndler)
-	router.DELETE("/recipes/:id", handler.DeleteRecipeHandler)
-	router.GET("/recipes/search", handler.SearchRecipeHandler)
-	router.GET("/recipes/:id", handler.GetOneRecipeHandler)
+
+	Authorized := router.Group("/")
+	Authorized.Use(AuthMiddleware())
+	{
+		Authorized.POST("/recipes", handler.NewRecipeHandler)
+		Authorized.PUT("/recipes/:id", handler.UpdateRecipeHAndler)
+		Authorized.DELETE("/recipes/:id", handler.DeleteRecipeHandler)
+		Authorized.GET("/recipes/search", handler.SearchRecipeHandler)
+		Authorized.GET("/recipes/:id", handler.GetOneRecipeHandler)
+	}
 	router.Run(":8080")
 }
