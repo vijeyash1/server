@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 	"github.com/vijeyash1/server/handlers"
@@ -14,10 +15,17 @@ import (
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := c.GetHeader("Authorization-Token")
-		if token != "12345" {
-			c.AbortWithStatusJSON(401, gin.H{"error": "Unauthorized"})
-			return
+		token := c.GetHeader("Authorization")
+		claims := &handlers.Claims{}
+		tkn, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
+			return []byte("secret"), nil
+		})
+		if err != nil {
+			if err == jwt.ErrSignatureInvalid || tkn == nil {
+				c.JSON(401, gin.H{"status": "error", "message": "Invalid token"})
+				c.Abort()
+				return
+			}
 		}
 		c.Next()
 	}
@@ -48,7 +56,8 @@ func InitRoutes() {
 
 	router := gin.Default()
 	router.GET("/recipes", handler.ListRecipesHandler)
-
+	authHandler := &handlers.AuthHandler{}
+	router.POST("/signin", authHandler.LoginHandler)
 	Authorized := router.Group("/")
 	Authorized.Use(AuthMiddleware())
 	{
