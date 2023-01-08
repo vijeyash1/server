@@ -4,7 +4,8 @@ import (
 	"context"
 	"log"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/gin-contrib/sessions"
+	redisStore "github.com/gin-contrib/sessions/redis"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis"
 	"github.com/vijeyash1/server/handlers"
@@ -15,17 +16,12 @@ import (
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := c.GetHeader("Authorization")
-		claims := &handlers.Claims{}
-		tkn, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
-			return []byte("secret"), nil
-		})
-		if err != nil {
-			if err == jwt.ErrSignatureInvalid || tkn == nil {
-				c.JSON(401, gin.H{"status": "error", "message": "Invalid token"})
-				c.Abort()
-				return
-			}
+		session := sessions.Default(c)
+		token := session.Get("sessionToken")
+		if token == nil {
+			c.JSON(401, gin.H{"status": "error", "message": "Unauthorized"})
+			c.Abort()
+			return
 		}
 		c.Next()
 	}
@@ -52,13 +48,16 @@ func InitRoutes() {
 	}
 	log.Println("Connected to MongoDB")
 
-	handler := handlers.NewRecipesHandler(client.Database("recipes").Collection("recipes"), ctx, redisClient)
+	handler := handlers.NewRecipesHandler(client.Database("recipes").Collection("recipes"), client.Database("users").Collection("recipes"), ctx, redisClient)
 
 	router := gin.Default()
+	store, _ := redisStore.NewStore(10, "tcp", "localhost:6379", "", []byte("secret"))
+	router.Use(sessions.Sessions("mysession", store))
 	router.GET("/recipes", handler.ListRecipesHandler)
-	authHandler := &handlers.AuthHandler{}
-	router.POST("/signin", authHandler.LoginHandler)
-	router.POST("/refresh", authHandler.RefreshTokenHandler)
+	router.POST("/signin", handler.LoginHandler)
+	router.POST("/refresh", handler.RefreshTokenHandler)
+	router.POST("/signup", handler.SignupHandler)
+	router.GET("/logout", handler.LogoutHandler)
 	Authorized := router.Group("/")
 	Authorized.Use(AuthMiddleware())
 	{

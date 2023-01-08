@@ -17,12 +17,13 @@ import (
 
 type RecipesHandler struct {
 	collection  *mongo.Collection
+	usercollection *mongo.Collection
 	ctx         context.Context
 	redisClient *redis.Client
 }
 
-func NewRecipesHandler(collection *mongo.Collection, ctx context.Context, redisClient *redis.Client) *RecipesHandler {
-	return &RecipesHandler{collection, ctx, redisClient}
+func NewRecipesHandler(collection, usercollection *mongo.Collection, ctx context.Context, redisClient *redis.Client) *RecipesHandler {
+	return &RecipesHandler{collection, usercollection, ctx, redisClient}
 }
 
 func (handler *RecipesHandler) GetOneRecipeHandler(c *gin.Context) {
