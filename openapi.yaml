@@ -1,0 +1,242 @@
+openapi: 3.0.1
+info:
+  title:  Building-Distributed-Applications-in-Gin
+  description: Recipes API
+  version: '0.1'
+servers:
+  - url: http://localhost:8080
+paths:
+  /recipes/search:
+    get:
+      description: Search for recipes by tags
+      parameters:
+        - name: tags
+          in: query
+          schema:
+            type: string
+          example: chicken
+      responses:
+        '200':
+          description: response for search recipes by tags
+          content:
+            application/json; charset=utf-8:
+              schema:
+                type: string
+              examples: {}
+      servers:
+        - url: http://localhost:8080
+    servers:
+      - url: http://localhost:8080
+  /recipes/{id}:
+    put:
+      description: Update a recipe by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                instructions:
+                  type: array
+                  items:
+                    type: string
+                name:
+                  type: string
+                ingredients:
+                  type: array
+                  items:
+                    type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+            examples:
+              '0':
+                value: >-
+                  {
+
+                  "name": "mutton",
+
+                  "tags": [
+
+                  "main",
+
+                  "chicken"
+
+                  ],
+
+                  "ingredients": [
+
+                  "4 (6 to 7-ounce) boneless skinless chicken breasts ",
+
+                  "10 grinds black pepper ",
+
+                  "1/2 tsp salt ",
+
+                  "2 tablespoon extra-virgin olive oil ",
+
+                  "1 teaspoon dried oregano ",
+
+                  "1 lemon, juiced"
+
+                  ],
+
+                  "instructions": [
+
+                  "To marinate the chicken: In a non-reactive dish, combine the
+                  lemon juice, olive oil, oregano, salt, and pepper and mix
+                  together",
+
+                  " Add the chicken breasts to the dish and rub both sides in
+                  the mixture",
+
+                  " Cover the dish with plastic wrap and let marinate in the
+                  refrigerator for at least 30 minutes and up to 4 hours",
+
+                  " To cook the chicken: Heat a nonstick skillet or grill pan
+                  over high heat",
+
+                  " Add the chicken breasts and cook, turning once, until well
+                  browned, about 4 to 5 minutes on each side or until cooked
+                  through",
+
+                  " Let the chicken rest on a cutting board for a few minutes
+                  before slicing it into thin strips"
+
+                  ]
+
+                  }
+      responses:
+        '200':
+          description: Recipes updated successfully response
+          content:
+            application/json; charset=utf-8:
+              schema:
+                type: string
+              examples: {}
+      servers:
+        - url: http://localhost:8080
+    servers:
+      - url: http://localhost:8080
+    delete:
+      description: deletes the recipe by id
+      responses:
+        '200':
+          description: response for delete recipe by id
+          content:
+            application/json; charset=utf-8:
+              schema:
+                type: string
+              examples: {}
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      servers:
+        - url: http://localhost:8080
+  /recipes:
+    get:
+      description: Get all recipes
+      responses:
+        '200':
+          description: Returns all the recipes
+      servers:
+        - url: http://localhost:8080
+    post:
+      description: create a new recipe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                instructions:
+                  type: array
+                  items:
+                    type: string
+                name:
+                  type: string
+                ingredients:
+                  type: array
+                  items:
+                    type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+            examples:
+              '0':
+                value: >-
+                  {
+
+                  "name": "Oregano Marinated Chicken",
+
+                  "tags": [
+
+                  "main",
+
+                  "chicken"
+
+                  ],
+
+                  "ingredients": [
+
+                  "4 (6 to 7-ounce) boneless skinless chicken breasts ",
+
+                  "10 grinds black pepper ",
+
+                  "1/2 tsp salt ",
+
+                  "2 tablespoon extra-virgin olive oil ",
+
+                  "1 teaspoon dried oregano ",
+
+                  "1 lemon, juiced"
+
+                  ],
+
+                  "instructions": [
+
+                  "To marinate the chicken: In a non-reactive dish, combine the
+                  lemon juice, olive oil, oregano, salt, and pepper and mix
+                  together",
+
+                  " Add the chicken breasts to the dish and rub both sides in
+                  the mixture",
+
+                  " Cover the dish with plastic wrap and let marinate in the
+                  refrigerator for at least 30 minutes and up to 4 hours",
+
+                  " To cook the chicken: Heat a nonstick skillet or grill pan
+                  over high heat",
+
+                  " Add the chicken breasts and cook, turning once, until well
+                  browned, about 4 to 5 minutes on each side or until cooked
+                  through",
+
+                  " Let the chicken rest on a cutting board for a few minutes
+                  before slicing it into thin strips"
+
+                  ]
+
+                  }
+      responses:
+        '201':
+          description: a new recipe is created response
+          content:
+            application/json; charset=utf-8:
+              schema:
+                type: string
+              examples: {}
+      servers:
+        - url: http://localhost:8080
+    servers:
+      - url: http://localhost:8080
